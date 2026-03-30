@@ -1,77 +1,58 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Online Human Annotation Pages</title>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Human annotation launcher</title>
 <style>
-body{font-family:Inter,system-ui,sans-serif;background:#0b1020;color:#e2e8f0;padding:32px;line-height:1.5}
-a{color:#60a5fa}
+body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#0b1020;color:#e2e8f0;margin:0}
+.wrap{max-width:900px;margin:0 auto;padding:28px}
+.card{background:#121a2b;border:1px solid #24324d;border-radius:16px;padding:20px}
+h1{margin-top:0}
+input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #24324d;background:#0f172a;color:#e2e8f0;margin:6px 0 14px}
+button{background:#60a5fa;color:#04111f;border:none;padding:10px 14px;border-radius:10px;font-weight:700;cursor:pointer}
+ul{padding-left:20px}
 li{margin:10px 0}
-code{background:#111827;padding:2px 6px;border-radius:6px}
-.card{max-width:1000px;background:#121a2b;border:1px solid #24324d;border-radius:16px;padding:20px;margin-bottom:20px}
-input{width:100%;max-width:900px;background:#0f172a;border:1px solid #24324d;color:#e2e8f0;padding:10px 12px;border-radius:10px}
-button{margin-top:12px;background:#60a5fa;color:#04111f;border:none;padding:10px 14px;border-radius:10px;font-weight:700;cursor:pointer}
-.small{color:#94a3b8;font-size:14px}
+a{color:#93c5fd}
+.small{font-size:13px;color:#94a3b8}
 </style>
 </head>
 <body>
-<h1>Online Human Annotation Pages</h1>
-
-<div class="card">
-  <h2>How to use</h2>
-  <ol>
-    <li>Upload these HTML files and your image folder to any static hosting service (GitHub Pages, Netlify, Vercel, lab server, etc.).</li>
-    <li>Deploy the included <code>google_apps_script.gs</code> as a Google Apps Script Web App connected to a Google Sheet.</li>
-    <li>Paste the image base URL and Apps Script URL below, then click “Generate annotator links”.</li>
-    <li>Send each annotator their personal link. They can submit directly to Google Sheet and still export a CSV backup.</li>
-  </ol>
-  <div class="small">Example image base URL: <code>https://your-site.com/images</code></div>
-  <div class="small">Example Apps Script URL: <code>https://script.google.com/macros/s/XXXXXXXX/exec</code></div>
+<div class="wrap">
+  <div class="card">
+    <h1>Human annotation launcher</h1>
+    <p class="small">Fill the two fields below, then generate links for each annotator page.</p>
+    <label>Image base URL</label>
+    <input id="imageBase" type="text" placeholder="https://your-site.com/images"/>
+    <label>Google Apps Script Web App URL</label>
+    <input id="submitUrl" type="text" placeholder="https://script.google.com/macros/s/.../exec"/>
+    <button id="genBtn" type="button">Generate annotator links</button>
+    <h2>Annotator pages</h2>
+    <ul id="linkList"><li><a href="annotator_01.html" data-page="annotator_01.html">Annotator 01</a></li>
+<li><a href="annotator_02.html" data-page="annotator_02.html">Annotator 02</a></li>
+<li><a href="annotator_03.html" data-page="annotator_03.html">Annotator 03</a></li>
+<li><a href="annotator_04.html" data-page="annotator_04.html">Annotator 04</a></li>
+<li><a href="annotator_05.html" data-page="annotator_05.html">Annotator 05</a></li>
+<li><a href="annotator_06.html" data-page="annotator_06.html">Annotator 06</a></li>
+<li><a href="annotator_07.html" data-page="annotator_07.html">Annotator 07</a></li>
+<li><a href="annotator_08.html" data-page="annotator_08.html">Annotator 08</a></li>
+<li><a href="annotator_09.html" data-page="annotator_09.html">Annotator 09</a></li>
+<li><a href="annotator_10.html" data-page="annotator_10.html">Annotator 10</a></li></ul>
+  </div>
 </div>
-
-<div class="card">
-  <h2>Shared configuration</h2>
-  <label>Image base URL</label><br>
-  <input id="imageBase" type="text" placeholder="https://your-site.com/images"><br><br>
-  <label>Google Apps Script Web App URL</label><br>
-  <input id="submitUrl" type="text" placeholder="https://script.google.com/macros/s/XXXXXXXX/exec"><br>
-  <button id="buildBtn">Generate annotator links</button>
-</div>
-
-<div class="card">
-  <h2>Annotator links</h2>
-  <ul id="links"></ul>
-  <p><a href="assignment_10x20.csv">assignment_10x20.csv</a></p>
-  <p><a href="google_apps_script.gs">google_apps_script.gs</a> · <a href="README_google_sheet_setup.md">README_google_sheet_setup.md</a></p>
-</div>
-
 <script>
-const pages = Array.from({length:10}, (_,i)=>`annotator_${String(i+1).padStart(2,'0')}.html`);
-function buildLinks(){
-  const imageBase = document.getElementById('imageBase').value.trim();
-  const submitUrl = document.getElementById('submitUrl').value.trim();
-  const ul = document.getElementById('links');
-  ul.innerHTML = '';
-  pages.forEach(p => {
-    const url = new URL(p, window.location.href);
-    if(imageBase) url.searchParams.set('imageBase', imageBase);
-    if(submitUrl) url.searchParams.set('submitUrl', submitUrl);
-    const li = document.createElement('li');
-    li.innerHTML = `<a href="${url.toString()}">${p.replace('.html','')}</a> <span class="small">→ ${url.toString()}</span>`;
-    ul.appendChild(li);
+document.getElementById('genBtn').addEventListener('click', () => {
+  const imageBase = encodeURIComponent(document.getElementById('imageBase').value.trim());
+  const submitUrl = encodeURIComponent(document.getElementById('submitUrl').value.trim());
+  document.querySelectorAll('#linkList a').forEach(a => {
+    const page = a.dataset.page;
+    let url = page;
+    const params = [];
+    if(imageBase) params.push('imageBase=' + imageBase);
+    if(submitUrl) params.push('submitUrl=' + submitUrl);
+    if(params.length) url += '?' + params.join('&');
+    a.href = url;
   });
-  localStorage.setItem('annotation_online_config', JSON.stringify({imageBase, submitUrl}));
-}
-window.addEventListener('DOMContentLoaded', () => {
-  const raw = localStorage.getItem('annotation_online_config');
-  if(raw){
-    const data = JSON.parse(raw);
-    if(data.imageBase) document.getElementById('imageBase').value = data.imageBase;
-    if(data.submitUrl) document.getElementById('submitUrl').value = data.submitUrl;
-  }
-  document.getElementById('buildBtn').addEventListener('click', buildLinks);
-  buildLinks();
 });
 </script>
 </body>
