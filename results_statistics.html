@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Results statistics</title>
+<style>
+body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#0b1020;color:#e2e8f0;margin:0}
+.wrap{max-width:1100px;margin:0 auto;padding:28px}
+.card{background:#121a2b;border:1px solid #24324d;border-radius:16px;padding:20px;margin-bottom:18px}
+h1,h2{margin-top:0}
+input,select{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #24324d;background:#0f172a;color:#e2e8f0;margin:6px 0 14px}
+button{background:#60a5fa;color:#04111f;border:none;padding:10px 14px;border-radius:10px;font-weight:700;cursor:pointer}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media (max-width: 800px){.grid{grid-template-columns:1fr}}
+.small{font-size:13px;color:#94a3b8}
+table{width:100%;border-collapse:collapse;margin-top:10px;font-size:14px}
+th,td{border-bottom:1px solid #24324d;padding:8px 10px;text-align:left}
+code{background:#0f172a;padding:2px 6px;border-radius:6px}
+.metric{display:inline-block;background:#0f172a;border:1px solid #24324d;padding:10px 12px;border-radius:10px;margin:6px 8px 6px 0}
+a{color:#93c5fd}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+</head>
+<body>
+<div class="wrap">
+<div class="card">
+<h1>Results statistics</h1>
+<p class="small">Upload either a single Google Sheet export CSV or multiple annotator CSV files. This page computes quick descriptive statistics in-browser.</p>
+<div class="grid">
+<div>
+<label>Google Sheet export CSV (optional)</label>
+<input id="sheetCsv" type="file" accept=".csv" />
+</div>
+<div>
+<label>Annotator CSV files (optional; multiple)</label>
+<input id="multiCsv" type="file" accept=".csv" multiple />
+</div>
+</div>
+<button id="runBtn" type="button">Compute statistics</button>
+<p class="small">Expected label values: <code>unsafe</code>, <code>harmful</code>, <code>yes</code>, <code>1</code> for unsafe/harmful; otherwise treated as not-unsafe.</p>
+</div>
+<div class="card" id="summaryCard" style="display:none">
+<h2>Summary</h2>
+<div id="metrics"></div>
+<div class="grid">
+<div>
+<h3>Per annotator counts</h3>
+<div id="annotatorTable"></div>
+</div>
+<div>
+<h3>Per model unsafe rate</h3>
+<div id="modelTable"></div>
+</div>
+</div>
+<h3>Preview</h3>
+<div id="previewTable"></div>
+</div>
+</div>
+<script>
+function parseFiles(files){
+  return Promise.all(Array.from(files).map(file => new Promise((resolve,reject)=>{
+    Papa.parse(file,{header:true,skipEmptyLines:true,complete:r=>resolve(r.data),error:reject});
+  })));
+}
+function normalizeRows(rows){
+  return rows.map(r=>{
+    const out={};
+    for(const [k,v] of Object.entries(r)) out[(k||'').trim()] = typeof v==='string'? v.trim(): v;
+    const labelRaw=(out.label||out.binary_label||out.annotation||'').toString().trim().toLowerCase();
+    const unsafe = ['unsafe','harmful','yes','1','true'].includes(labelRaw) ? 1 : 0;
+    const annotator = out.annotator || out.annotator_id || out.worker || 'unknown';
+    const model = out.model || 'unknown';
+    const sample_id = out.sample_id || out.sample || out.id || `${out.image||''}__${out.caption||''}`;
+    return {
+      annotator, model, sample_id,
+      image: out.image || out.image_path || '',
+      label_raw: labelRaw || (unsafe ? 'unsafe' : 'not_unsafe'),
+      unsafe,
+      notes: out.notes || '',
+      caption: out.caption || out.caption_adv || '',
+      clean_caption: out.clean_caption || out.caption_clean || ''
+    };
+  }).filter(r=>r.sample_id);
+}
+function tableHtml(headers, rows){
+  let html='<table><thead><tr>'+headers.map(h=>`<th>${h}</th>`).join('')+'</tr></thead><tbody>';
+  for(const row of rows){ html+='<tr>'+row.map(v=>`<td>${v}</td>`).join('')+'</tr>'; }
+  html+='</tbody></table>'; return html;
+}
+function pct(n,d){ return d? (100*n/d).toFixed(1)+'%':'-'; }
+
+document.getElementById('runBtn').addEventListener('click', async ()=>{
+  const sheet = document.getElementById('sheetCsv').files;
+  const multi = document.getElementById('multiCsv').files;
+  let rows=[];
+  if(sheet.length){ const parsed=await parseFiles(sheet); rows = rows.concat(...parsed); }
+  if(multi.length){ const parsed=await parseFiles(multi); rows = rows.concat(...parsed); }
+  rows = normalizeRows(rows);
+  if(!rows.length){ alert('No rows loaded.'); return; }
+  const total=rows.length;
+  const unsafe=rows.reduce((a,b)=>a+b.unsafe,0);
+  const annotMap=new Map(); const modelMap=new Map();
+  for(const r of rows){
+    const a=annotMap.get(r.annotator)||{count:0,unsafe:0}; a.count++; a.unsafe+=r.unsafe; annotMap.set(r.annotator,a);
+    const m=modelMap.get(r.model)||{count:0,unsafe:0}; m.count++; m.unsafe+=r.unsafe; modelMap.set(r.model,m);
+  }
+  const metrics=`<span class="metric"><b>Total labels</b><br>${total}</span>
+  <span class="metric"><b>Unsafe labels</b><br>${unsafe} (${pct(unsafe,total)})</span>
+  <span class="metric"><b>Annotators</b><br>${annotMap.size}</span>
+  <span class="metric"><b>Unique samples</b><br>${new Set(rows.map(r=>r.sample_id)).size}</span>`;
+  document.getElementById('metrics').innerHTML=metrics;
+  const annotRows=[...annotMap.entries()].sort().map(([k,v])=>[k,v.count,`${v.unsafe} (${pct(v.unsafe,v.count)})`]);
+  document.getElementById('annotatorTable').innerHTML=tableHtml(['Annotator','Count','Unsafe'], annotRows);
+  const modelRows=[...modelMap.entries()].sort().map(([k,v])=>[k,v.count,`${v.unsafe} (${pct(v.unsafe,v.count)})`]);
+  document.getElementById('modelTable').innerHTML=tableHtml(['Model','Count','Unsafe'], modelRows);
+  const preview=rows.slice(0,20).map(r=>[r.annotator,r.model,r.sample_id,r.image,r.label_raw]);
+  document.getElementById('previewTable').innerHTML=tableHtml(['Annotator','Model','Sample ID','Image','Label'], preview);
+  document.getElementById('summaryCard').style.display='block';
+});
+</script>
+</body>
+</html>
