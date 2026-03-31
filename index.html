@@ -6,29 +6,40 @@
 <title>Human annotation launcher</title>
 <style>
 body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#0b1020;color:#e2e8f0;margin:0}
-.wrap{max-width:900px;margin:0 auto;padding:28px}
-.card{background:#121a2b;border:1px solid #24324d;border-radius:16px;padding:20px}
-h1{margin-top:0}
+.wrap{max-width:980px;margin:0 auto;padding:28px}
+.card{background:#121a2b;border:1px solid #24324d;border-radius:16px;padding:20px;margin-bottom:18px}
+h1,h2{margin-top:0}
 input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #24324d;background:#0f172a;color:#e2e8f0;margin:6px 0 14px}
 button{background:#60a5fa;color:#04111f;border:none;padding:10px 14px;border-radius:10px;font-weight:700;cursor:pointer}
 ul{padding-left:20px}
 li{margin:10px 0}
 a{color:#93c5fd}
 .small{font-size:13px;color:#94a3b8}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.pill{display:inline-block;padding:4px 8px;border:1px solid #24324d;border-radius:999px;color:#94a3b8;font-size:12px;margin-right:8px}
+@media (max-width: 800px){.row{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="card">
     <h1>Human annotation launcher</h1>
-    <p class="small">Fill the two fields below, then generate links for each annotator page.</p>
+    <p class="small">Fill the fields below once, then generate annotator links. The launcher also stores these values in your browser so you can reopen pages later without re-entering everything.</p>
     <label>Image base URL</label>
     <input id="imageBase" type="text" placeholder="https://your-site.com/images"/>
-    <label>Google Apps Script Web App URL</label>
+    <label>Google Apps Script Web App URL (must be the /exec URL)</label>
     <input id="submitUrl" type="text" placeholder="https://script.google.com/macros/s/.../exec"/>
-    <button id="genBtn" type="button">Generate annotator links</button>
-    <h2>Annotator pages</h2>
-    <ul id="linkList"><li><a href="annotator_01.html" data-page="annotator_01.html">Annotator 01</a></li>
+    <label>Google Sheet URL (optional, for admin quick access)</label>
+    <input id="sheetUrl" type="text" placeholder="https://docs.google.com/spreadsheets/d/..."/>
+    <button id="genBtn" type="button">Generate / refresh links</button>
+    <span class="small" id="saveStatus"></span>
+  </div>
+
+  <div class="row">
+    <div class="card">
+      <h2>Annotator pages</h2>
+      <p class="small">Share one link per annotator. These links carry the image base URL and submit URL automatically.</p>
+      <ul id="linkList"><li><a href="annotator_01.html" data-page="annotator_01.html">Annotator 01</a></li>
 <li><a href="annotator_02.html" data-page="annotator_02.html">Annotator 02</a></li>
 <li><a href="annotator_03.html" data-page="annotator_03.html">Annotator 03</a></li>
 <li><a href="annotator_04.html" data-page="annotator_04.html">Annotator 04</a></li>
@@ -38,28 +49,75 @@ a{color:#93c5fd}
 <li><a href="annotator_08.html" data-page="annotator_08.html">Annotator 08</a></li>
 <li><a href="annotator_09.html" data-page="annotator_09.html">Annotator 09</a></li>
 <li><a href="annotator_10.html" data-page="annotator_10.html">Annotator 10</a></li></ul>
+    </div>
 
-    <h2>Admin</h2>
-    <p class="small">Need a quick summary after collecting labels? Open the results page below.</p>
-    <ul>
-      <li><a href="results_statistics.html">Results statistics</a></li>
-    </ul>
+    <div class="card">
+      <h2>Admin / result access</h2>
+      <p class="small">Use these links to verify the backend is live and to open the response sheet directly.</p>
+      <div class="small">
+        <span class="pill">Tip</span>
+        The Apps Script URL must be the deployed <strong>/exec</strong> Web App URL with access set to <strong>Anyone with the link</strong>.
+      </div>
+      <ul>
+        <li><a id="appsHealth" href="#" target="_blank" rel="noopener">Open Apps Script health check</a></li>
+        <li><a id="sheetLink" href="#" target="_blank" rel="noopener">Open Google Sheet</a></li>
+        <li><a href="assignment_10x20.csv" target="_blank" rel="noopener">Open current assignment CSV</a></li>
+      </ul>
+      <p class="small">After annotators click <strong>Submit to Google Sheet</strong>, refresh the Sheet and check that new rows appear in the <code>responses</code> tab.</p>
+    </div>
   </div>
 </div>
+
 <script>
-document.getElementById('genBtn').addEventListener('click', () => {
-  const imageBase = encodeURIComponent(document.getElementById('imageBase').value.trim());
-  const submitUrl = encodeURIComponent(document.getElementById('submitUrl').value.trim());
+const STORAGE_KEY = 'annotation_launcher_config';
+
+function restore() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const cfg = JSON.parse(raw);
+    if (cfg.imageBase) document.getElementById('imageBase').value = cfg.imageBase;
+    if (cfg.submitUrl) document.getElementById('submitUrl').value = cfg.submitUrl;
+    if (cfg.sheetUrl) document.getElementById('sheetUrl').value = cfg.sheetUrl;
+  } catch(e) {}
+  refreshLinks();
+}
+function save() {
+  const cfg = {
+    imageBase: document.getElementById('imageBase').value.trim(),
+    submitUrl: document.getElementById('submitUrl').value.trim(),
+    sheetUrl: document.getElementById('sheetUrl').value.trim()
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+  const st = document.getElementById('saveStatus');
+  st.textContent = 'Saved in browser.';
+  refreshLinks();
+}
+function refreshLinks() {
+  const imageBase = document.getElementById('imageBase').value.trim();
+  const submitUrl = document.getElementById('submitUrl').value.trim();
+  const sheetUrl = document.getElementById('sheetUrl').value.trim();
+
   document.querySelectorAll('#linkList a').forEach(a => {
     const page = a.dataset.page;
-    let url = page;
-    const params = [];
-    if(imageBase) params.push('imageBase=' + imageBase);
-    if(submitUrl) params.push('submitUrl=' + submitUrl);
-    if(params.length) url += '?' + params.join('&');
-    a.href = url;
+    const params = new URLSearchParams();
+    if (imageBase) params.set('imageBase', imageBase);
+    if (submitUrl) params.set('submitUrl', submitUrl);
+    const qs = params.toString();
+    a.href = qs ? `${page}?${qs}` : page;
   });
-});
+
+  const appsHealth = document.getElementById('appsHealth');
+  appsHealth.href = submitUrl || '#';
+
+  const sheetLink = document.getElementById('sheetLink');
+  sheetLink.href = sheetUrl || '#';
+}
+document.getElementById('genBtn').addEventListener('click', save);
+document.getElementById('imageBase').addEventListener('input', save);
+document.getElementById('submitUrl').addEventListener('input', save);
+document.getElementById('sheetUrl').addEventListener('input', save);
+restore();
 </script>
 </body>
 </html>
